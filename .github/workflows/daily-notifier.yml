@@ -1,0 +1,110 @@
+name: Daily Hyderabad Event Alert
+
+on:
+  schedule:
+    - cron: '30 1 * * *' # Triggers automatically every morning at 7:00 AM IST
+  workflow_dispatch: # Allows you to manually trigger it via GitHub UI at any time
+
+jobs:
+  gather-and-email:
+    runs-on: ubuntu-latest
+
+    steps:
+    # Step 1: Run an inline JavaScript tool to scrape data and save it as a local HTML report
+    - name: Fetch and Format Local Events
+      run: |
+        npm init -y
+        npm install rss-parser
+
+        cat << 'EOF' > generate-report.js
+        const fs = require('fs');
+        const Parser = require('rss-parser');
+        const parser = new Parser();
+
+        async function fetchDailyEvents() {
+          const events = [];
+          const uniqueTitles = new Set();
+          const queries = [
+            { q: 'Hyderabad "AI" OR "Artificial Intelligence" OR "Tech" summit OR conference OR expo', cat: 'AI & TECH' },
+            { q: 'Hyderabad "Real Estate" OR "Property Show" OR "CREDAI" OR "HITEX"', cat: 'REAL ESTATE' }
+          ];
+
+          for (const query of queries) {
+            try {
+              const url = `https://news.google.com/rss/search?q=${encodeURIComponent(query.q)}&hl=en-IN&gl=IN&ceid=IN:en`;
+              const feed = await parser.parseURL(url);
+
+              for (const item of feed.items) {
+                if (!item.title || uniqueTitles.has(item.title.toLowerCase())) continue;
+                const cleanTitle = item.title.split(' - ')[0].trim();
+                uniqueTitles.add(item.title.toLowerCase());
+
+                let venue = 'HITEX / HICC / Online';
+                if (cleanTitle.toLowerCase().includes('hitex')) venue = 'HITEX Exhibition Centre';
+                if (cleanTitle.toLowerCase().includes('hicc') || cleanTitle.toLowerCase().includes('novotel')) venue = 'HICC Novotel';
+
+                const pubDate = item.pubDate ? new Date(item.pubDate) : new Date();
+                const isToday = pubDate.toDateString() === new Date().toDateString();
+
+                events.push({ title: cleanTitle, venue, date: pubDate.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }), link: item.link || '', category: query.cat, isToday });
+              }
+            } catch (err) {
+              console.error(err.message);
+            }
+          }
+          return events.slice(0, 8);
+        }
+
+        async function run() {
+          const events = await fetchDailyEvents();
+          const todayStr = new Date().toLocaleDateString('en-IN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+          
+          const todayEvents = events.filter(e => e.isToday);
+          const upcomingEvents = events.filter(e => !e.isToday);
+
+          let html = `<div style="font-family: Arial, sans-serif; max-width: 600px; color: #333; line-height: 1.6;">`;
+          html += `<h2 style="color: #1a73e8; border-bottom: 2px solid #1a73e8; padding-bottom: 8px; margin-bottom: 20px;">🚨 Hyderabad Events Digest</h2>`;
+          html += `<p style="color: #666; font-size: 14px;">📅 <strong>Date:</strong> ${todayStr}</p><br/>`;
+
+          if (todayEvents.length > 0) {
+            html += `<h3 style="color: #d93025; border-left: 4px solid #d93025; padding-left: 8px; margin-top: 20px;">🔥 HAPPENING TODAY:</h3><ul style="padding-left: 20px;">`;
+            todayEvents.forEach(e => {
+              html += `<li style="margin-bottom: 16px;"><strong>[${e.category}]</strong> <span style="font-size: 16px; color: #111;">${e.title}</span><br/>📍 <em>Venue:</em> ${e.venue}<br/>🔗 <a href="${e.link}" style="color: #1a73e8; text-decoration: none; font-weight: bold;">View Details &rarr;</a></li>`;
+            });
+            html += `</ul><br/>`;
+          } else {
+            html += `<div style="background-color: #f8f9fa; padding: 12px; border-radius: 4px; border-left: 4px solid #777; font-style: italic; color: #555; margin-bottom: 20px;">⚠️ No specific major real estate or AI expos are flagged as starting exactly today.</div>`;
+          }
+
+          if (upcomingEvents.length > 0) {
+            html += `<h3 style="color: #188038; border-left: 4px solid #188038; padding-left: 8px; margin-top: 25px;">📅 UPCOMING EVENTS LATER THIS MONTH:</h3><ul style="padding-left: 20px;">`;
+            upcomingEvents.slice(0, 5).forEach(e => {
+              html += `<li style="margin-bottom: 16px;"><strong>[${e.category}]</strong> <span style="font-size: 15px; color: #111;">${e.title}</span><br/>📍 <em>Venue:</em> ${e.venue} (${e.date})<br/>🔗 <a href="${e.link}" style="color: #1a73e8; text-decoration: none;">View Details &rarr;</a></li>`;
+            });
+            html += `</ul>`;
+          }
+
+          html += `<hr style="border: 0; border-top: 1px solid #eee; margin-top: 40px;"/>`;
+          html += `<p style="font-size: 11px; color: #999; font-style: italic; text-align: center;">Automated daily internal developer dispatch.</p></div>`;
+
+          fs.writeFileSync('digest.html', html);
+        }
+
+        run();
+        EOF
+
+        node generate-report.js
+
+    # Step 2: Use an out-of-the-box marketplace action to securely deliver the HTML report via email
+    - name: Dispatch Email to Founder
+      uses: dawidd6/action-send-mail@v3
+      with:
+        server_address: smtp.gmail.com
+        server_port: 465
+        secure: true
+        username: ${{ secrets.SENDER_EMAIL }}
+        password: ${{ secrets.GMAIL_APP_PASSWORD }}
+        subject: 🚨 Hyderabad Daily Events Alert
+        to: ${{ secrets.FOUNDER_EMAIL }}
+        from: Hyderabad Event Bot <noreply@github.com>
+        html_body: file://digest.html
