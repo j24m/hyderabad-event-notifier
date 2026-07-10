@@ -24,12 +24,12 @@ jobs:
           const events = [];
           const uniqueTitles = new Set();
           
-          // Amplified queries targeted specifically at event registries and scheduling updates
+          // Broad-spectrum query strings built to force extraction of regional listing registries
           const queries = [
-            { q: 'Hyderabad "AI" OR "Artificial Intelligence" OR "Tech" expo OR conference OR summit', cat: 'AI & TECH' },
-            { q: 'Hyderabad "Real Estate" OR "Property Show" OR "CREDAI" OR "HITEX" OR "exhibition"', cat: 'REAL ESTATE' },
-            { q: 'site:tradeindia.com/tradeshows "Hyderabad" "2026"', cat: 'REAL ESTATE' },
-            { q: 'site:allevents.in/hyderabad "expo" OR "exhibition"', cat: 'MIXED' }
+            { q: 'Hyderabad "Real Estate" OR "Property" OR "Sweet Home Expo" OR "CREDAI"', cat: 'REAL ESTATE' },
+            { q: 'Hyderabad "HITEX" OR "HICC" OR "Convention Center" expo OR exhibition', cat: 'REAL ESTATE' },
+            { q: 'Hyderabad "AI" OR "Artificial Intelligence" OR "Tech" summit OR conference', cat: 'AI & TECH' },
+            { q: 'site:allevents.in "Hyderabad" "Real Estate" OR "Tech"', cat: 'MIXED' }
           ];
 
           for (const query of queries) {
@@ -43,17 +43,16 @@ jobs:
                 const cleanTitle = item.title.split(' - ')[0].trim();
                 uniqueTitles.add(item.title.toLowerCase());
 
-                // Structural venue check
-                let venue = 'Hyderabad Hubs / HITEX / HICC';
+                let venue = 'HITEX / HICC / Hyderabad Hubs';
                 const lowerTitle = cleanTitle.toLowerCase();
                 if (lowerTitle.includes('hitex')) venue = 'HITEX Exhibition Centre';
                 if (lowerTitle.includes('hicc') || lowerTitle.includes('novotel')) venue = 'HICC Novotel';
                 if (lowerTitle.includes('classic convention')) venue = 'Classic Convention Centre';
 
-                // Explicit context parsing logic
+                // Resolve categorized sorting based on deep content analysis
                 let category = query.cat;
-                if (category === 'MIXED') {
-                  category = (lowerTitle.includes('property') || lowerTitle.includes('estate') || lowerTitle.includes('building') || lowerTitle.includes('sustain')) ? 'REAL ESTATE' : 'AI & TECH';
+                if (category === 'MIXED' || lowerTitle.includes('hitex') || lowerTitle.includes('exhibition')) {
+                  category = (lowerTitle.includes('property') || lowerTitle.includes('estate') || lowerTitle.includes('home') || lowerTitle.includes('building') || lowerTitle.includes('sustain') || lowerTitle.includes('housing')) ? 'REAL ESTATE' : 'AI & TECH';
                 }
 
                 const pubDate = item.pubDate ? new Date(item.pubDate) : new Date();
@@ -67,12 +66,12 @@ jobs:
                 });
               }
             } catch (err) {
-              console.error(`Query stream skip: ${err.message}`);
+              console.error(`Query warning: ${err.message}`);
             }
           }
 
-          // Return compiled overview up to 12 strong records
-          return events.slice(0, 12);
+          // Return all matching logs up to 15 high-signal entries
+          return events.slice(0, 15);
         }
 
         async function run() {
@@ -90,11 +89,11 @@ jobs:
             });
             html += `</ul>`;
           } else {
-            html += `<div style="background-color: #f8f9fa; padding: 12px; border-radius: 4px; border-left: 4px solid #777; font-style: italic; color: #555; margin-bottom: 20px;">⚠️ No active expo logs captured in the current directory sweeps.</div>`;
+            html += `<div style="background-color: #f8f9fa; padding: 12px; border-radius: 4px; border-left: 4px solid #777; font-style: italic; color: #555; margin-bottom: 20px;">⚠️ No active matching event records found in current directories.</div>`;
           }
 
           html += `<hr style="border: 0; border-top: 1px solid #eee; margin-top: 40px;"/>`;
-          html += `<p style="font-size: 11px; color: #999; font-style: italic; text-align: center;">Automated broad-spectrum internal developer dispatch.</p></div>`;
+          html += `<p style="font-size: 11px; color: #999; font-style: italic; text-align: center;">Automated daily multi-source developer dispatch.</p></div>`;
 
           fs.writeFileSync('digest.html', html);
         }
