@@ -13,34 +13,27 @@ jobs:
     - name: Fetch and Format Local Events
       run: |
         npm init -y
-        npm install rss-parser axios
+        npm install rss-parser
 
         cat << 'EOF' > generate-report.js
         const fs = require('fs');
         const Parser = require('rss-parser');
-        const axios = require('axios');
         const parser = new Parser();
 
         async function fetchDailyEvents() {
           const events = [];
           const uniqueTitles = new Set();
-          const today = new Date();
-          today.setHours(0,0,0,0);
-
-          // 1. Target Data Sources Strategy (RSS & Open Aggregator Endpoints)
-          const targetFeeds = [
-            // Target 1: General Tech & AI Hub Streams
-            { url: 'https://news.google.com/rss/search?q=Hyderabad+%22AI%22+OR+%22Artificial+Intelligence%22+OR+%22Tech%22+summit+OR+conference+OR+expo&hl=en-IN&gl=IN&ceid=IN:en', cat: 'AI & TECH' },
-            // Target 2: Real Estate & Infrastructure Hub Streams
-            { url: 'https://news.google.com/rss/search?q=Hyderabad+%22Real+Estate%22+OR+%22Property+Show%22+OR+%22CREDAI%22+OR+%22HITEX%22&hl=en-IN&gl=IN&ceid=IN:en', cat: 'REAL ESTATE' },
-            // Target 3: Cross-platform listing events engine
-            { url: 'https://news.google.com/rss/search?q=site:allevents.in/hyderabad+%22AI%22+OR+%22Tech%22+OR+%22Property%22&hl=en-IN&gl=IN&ceid=IN:en', cat: 'MIXED' },
-            { url: 'https://news.google.com/rss/search?q=site:meetup.com/find/in--hyderabad+%22Tech%22+OR+%22Developer%22&hl=en-IN&gl=IN&ceid=IN:en', cat: 'AI & TECH' }
+          
+          // Refined, high-yield queries targeting July/August pipelines
+          const queries = [
+            { q: 'Hyderabad "AI" OR "Artificial Intelligence" OR "Tech" expo OR conference OR summit', cat: 'AI & TECH' },
+            { q: 'Hyderabad "Real Estate" OR "Property Show" OR "HITEX" OR "HICC"', cat: 'REAL ESTATE' }
           ];
 
-          for (const feedConfig of targetFeeds) {
+          for (const query of queries) {
             try {
-              const feed = await parser.parseURL(feedConfig.url);
+              const url = `https://news.google.com/rss/search?q=${encodeURIComponent(query.q)}&hl=en-IN&gl=IN&ceid=IN:en`;
+              const feed = await parser.parseURL(url);
 
               for (const item of feed.items) {
                 if (!item.title || uniqueTitles.has(item.title.toLowerCase())) continue;
@@ -48,77 +41,51 @@ jobs:
                 const cleanTitle = item.title.split(' - ')[0].trim();
                 uniqueTitles.add(item.title.toLowerCase());
 
-                // Structural matching for venues
-                let venue = 'HITEX / HICC / Online';
+                // Structural venue sorting logic
+                let venue = 'HITEX / HICC / Hyderabad Hubs';
                 const lowerTitle = cleanTitle.toLowerCase();
                 if (lowerTitle.includes('hitex')) venue = 'HITEX Exhibition Centre';
                 if (lowerTitle.includes('hicc') || lowerTitle.includes('novotel')) venue = 'HICC Novotel';
 
-                // Determine appropriate categorization category
-                let category = feedConfig.cat;
-                if (category === 'MIXED') {
-                  category = (lowerTitle.includes('property') || lowerTitle.includes('estate') || lowerTitle.includes('credai')) ? 'REAL ESTATE' : 'AI & TECH';
-                }
-
                 const pubDate = item.pubDate ? new Date(item.pubDate) : new Date();
-                pubDate.setHours(0,0,0,0);
-
-                // Date Filter: Only extract present day or highly anticipated future listings
-                if (pubDate < today) continue; 
-
-                const isToday = pubDate.getTime() === today.getTime();
 
                 events.push({ 
                   title: cleanTitle, 
                   venue, 
-                  date: pubDate.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }), 
+                  date: pubDate.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }), 
                   link: item.link || '', 
-                  category, 
-                  isToday 
+                  category: query.cat
                 });
               }
             } catch (err) {
-              console.error(`Error parsing source stream: ${err.message}`);
+              console.error(`Error processing query: ${err.message}`);
             }
           }
 
-          // Sort so today's priority items surface first
-          return events.sort((a, b) => (a.isToday ? -1 : 1));
+          // Return top 10 relevant matches found across the ecosystem
+          return events.slice(0, 10);
         }
 
         async function run() {
           const events = await fetchDailyEvents();
           const todayStr = new Date().toLocaleDateString('en-IN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
-          
-          const todayEvents = events.filter(e => e.isToday);
-          const upcomingEvents = events.filter(e => !e.isToday);
 
           let html = `<div style="font-family: Arial, sans-serif; max-width: 600px; color: #333; line-height: 1.6;">`;
           html += `<h2 style="color: #1a73e8; border-bottom: 2px solid #1a73e8; padding-bottom: 8px; margin-bottom: 20px;">🚨 Hyderabad Events Digest</h2>`;
           html += `<p style="color: #666; font-size: 14px;">📅 <strong>System Dispatch Date:</strong> ${todayStr}</p><br/>`;
 
-          if (todayEvents.length > 0) {
-            html += `<h3 style="color: #d93025; border-left: 4px solid #d93025; padding-left: 8px; margin-top: 20px;">🔥 HAPPENING TODAY:</h3><ul style="padding-left: 20px;">`;
-            todayEvents.forEach(e => {
-              html += `<li style="margin-bottom: 16px;"><strong>[${e.category}]</strong> <span style="font-size: 16px; color: #111;">${e.title}</span><br/>📍 <em>Venue:</em> ${e.venue}<br/>🔗 <a href="${e.link}" style="color: #1a73e8; text-decoration: none; font-weight: bold;">View Details &rarr;</a></li>`;
-            });
-            html += `</ul><br/>`;
-          } else {
-            html += `<div style="background-color: #f8f9fa; padding: 12px; border-radius: 4px; border-left: 4px solid #777; font-style: italic; color: #555; margin-bottom: 20px;">⚠️ No specific major real estate or AI expos are flagged as starting exactly today.</div>`;
-          }
-
-          if (upcomingEvents.length > 0) {
-            html += `<h3 style="color: #188038; border-left: 4px solid #188038; padding-left: 8px; margin-top: 25px;">📅 UPCOMING FUTURE EVENTS:</h3><ul style="padding-left: 20px;">`;
-            upcomingEvents.slice(0, 8).forEach(e => {
-              html += `<li style="margin-bottom: 16px;"><strong>[${e.category}]</strong> <span style="font-size: 15px; color: #111;">${e.title}</span><br/>📍 <em>Venue:</em> ${e.venue} <span style="color: #666; font-size: 13px;">(${e.date})</span><br/>🔗 <a href="${e.link}" style="color: #1a73e8; text-decoration: none;">View Details &rarr;</a></li>`;
+          if (events.length > 0) {
+            html += `<h3 style="color: #1a73e8; border-left: 4px solid #1a73e8; padding-left: 8px; margin-top: 20px;">🔥 ACTIVE TRACKED EVENTS FOR THIS SEASON:</h3><ul style="padding-left: 20px;">`;
+            events.forEach(e => {
+              html += `<li style="margin-bottom: 16px;"><strong>[${e.category}]</strong> <span style="font-size: 15px; color: #111; font-weight: bold;">${e.title}</span><br/>📍 <em>Venue:</em> ${e.venue} <span style="color: #777; font-size: 12px;">(Listed: ${e.date})</span><br/>🔗 <a href="${e.link}" style="color: #1a73e8; text-decoration: none; font-weight: bold;">View Details &rarr;</a></li>`;
             });
             html += `</ul>`;
           } else {
-            html += `<p style="font-style: italic; color: #888; font-size: 13px;">No new future events tracked in this window.</p>`;
+            html += `<div style="background-color: #f8f9fa; padding: 12px; border-radius: 4px; border-left: 4px solid #777; font-style: italic; color: #555; margin-bottom: 20px;">⚠️ No specific major real estate or AI expos are flagged in current search feeds.</div>`;
           }
 
           html += `<hr style="border: 0; border-top: 1px solid #eee; margin-top: 40px;"/>`;
-          html += `<p style="font-size: 11px; color: #999; font-style: italic; text-align: center;">Automated multi-source internal developer dispatch.</p></div>`;
+          html += `<p style="font-size: 11px; color: #999; font-style: italic; text-align: center;">Automated daily multi-source developer dispatch.</p></div>`;
 
           fs.writeFileSync('digest.html', html);
         }
