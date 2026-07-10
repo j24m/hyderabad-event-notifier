@@ -2,7 +2,7 @@ name: Daily Hyderabad Event Alert
 
 on:
   schedule:
-    - cron: '10 1 * * *' # 6:40 AM IST (Avoids the 7:00 AM peak queue traffic)
+    - cron: '10 1 * * *' # 6:40 AM IST
   workflow_dispatch: 
 
 jobs:
@@ -24,10 +24,12 @@ jobs:
           const events = [];
           const uniqueTitles = new Set();
           
-          // Refined, high-yield queries targeting July/August pipelines
+          // Amplified queries targeted specifically at event registries and scheduling updates
           const queries = [
             { q: 'Hyderabad "AI" OR "Artificial Intelligence" OR "Tech" expo OR conference OR summit', cat: 'AI & TECH' },
-            { q: 'Hyderabad "Real Estate" OR "Property Show" OR "HITEX" OR "HICC"', cat: 'REAL ESTATE' }
+            { q: 'Hyderabad "Real Estate" OR "Property Show" OR "CREDAI" OR "HITEX" OR "exhibition"', cat: 'REAL ESTATE' },
+            { q: 'site:tradeindia.com/tradeshows "Hyderabad" "2026"', cat: 'REAL ESTATE' },
+            { q: 'site:allevents.in/hyderabad "expo" OR "exhibition"', cat: 'MIXED' }
           ];
 
           for (const query of queries) {
@@ -41,11 +43,18 @@ jobs:
                 const cleanTitle = item.title.split(' - ')[0].trim();
                 uniqueTitles.add(item.title.toLowerCase());
 
-                // Structural venue sorting logic
-                let venue = 'HITEX / HICC / Hyderabad Hubs';
+                // Structural venue check
+                let venue = 'Hyderabad Hubs / HITEX / HICC';
                 const lowerTitle = cleanTitle.toLowerCase();
                 if (lowerTitle.includes('hitex')) venue = 'HITEX Exhibition Centre';
                 if (lowerTitle.includes('hicc') || lowerTitle.includes('novotel')) venue = 'HICC Novotel';
+                if (lowerTitle.includes('classic convention')) venue = 'Classic Convention Centre';
+
+                // Explicit context parsing logic
+                let category = query.cat;
+                if (category === 'MIXED') {
+                  category = (lowerTitle.includes('property') || lowerTitle.includes('estate') || lowerTitle.includes('building') || lowerTitle.includes('sustain')) ? 'REAL ESTATE' : 'AI & TECH';
+                }
 
                 const pubDate = item.pubDate ? new Date(item.pubDate) : new Date();
 
@@ -54,16 +63,16 @@ jobs:
                   venue, 
                   date: pubDate.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }), 
                   link: item.link || '', 
-                  category: query.cat
+                  category
                 });
               }
             } catch (err) {
-              console.error(`Error processing query: ${err.message}`);
+              console.error(`Query stream skip: ${err.message}`);
             }
           }
 
-          // Return top 10 relevant matches found across the ecosystem
-          return events.slice(0, 10);
+          // Return compiled overview up to 12 strong records
+          return events.slice(0, 12);
         }
 
         async function run() {
@@ -75,17 +84,17 @@ jobs:
           html += `<p style="color: #666; font-size: 14px;">📅 <strong>System Dispatch Date:</strong> ${todayStr}</p><br/>`;
 
           if (events.length > 0) {
-            html += `<h3 style="color: #1a73e8; border-left: 4px solid #1a73e8; padding-left: 8px; margin-top: 20px;">🔥 ACTIVE TRACKED EVENTS FOR THIS SEASON:</h3><ul style="padding-left: 20px;">`;
+            html += `<h3 style="color: #1a73e8; border-left: 4px solid #1a73e8; padding-left: 8px; margin-top: 20px;">🔥 ACTIVE TRACKED UPDATES FOR THIS SEASON:</h3><ul style="padding-left: 20px;">`;
             events.forEach(e => {
-              html += `<li style="margin-bottom: 16px;"><strong>[${e.category}]</strong> <span style="font-size: 15px; color: #111; font-weight: bold;">${e.title}</span><br/>📍 <em>Venue:</em> ${e.venue} <span style="color: #777; font-size: 12px;">(Listed: ${e.date})</span><br/>🔗 <a href="${e.link}" style="color: #1a73e8; text-decoration: none; font-weight: bold;">View Details &rarr;</a></li>`;
+              html += `<li style="margin-bottom: 16px;"><strong>[${e.category}]</strong> <span style="font-size: 15px; color: #111; font-weight: bold;">${e.title}</span><br/>📍 <em>Venue:</em> ${e.venue} <span style="color: #777; font-size: 12px;">(Tracked: ${e.date})</span><br/>🔗 <a href="${e.link}" style="color: #1a73e8; text-decoration: none; font-weight: bold;">View Details &rarr;</a></li>`;
             });
             html += `</ul>`;
           } else {
-            html += `<div style="background-color: #f8f9fa; padding: 12px; border-radius: 4px; border-left: 4px solid #777; font-style: italic; color: #555; margin-bottom: 20px;">⚠️ No specific major real estate or AI expos are flagged in current search feeds.</div>`;
+            html += `<div style="background-color: #f8f9fa; padding: 12px; border-radius: 4px; border-left: 4px solid #777; font-style: italic; color: #555; margin-bottom: 20px;">⚠️ No active expo logs captured in the current directory sweeps.</div>`;
           }
 
           html += `<hr style="border: 0; border-top: 1px solid #eee; margin-top: 40px;"/>`;
-          html += `<p style="font-size: 11px; color: #999; font-style: italic; text-align: center;">Automated daily multi-source developer dispatch.</p></div>`;
+          html += `<p style="font-size: 11px; color: #999; font-style: italic; text-align: center;">Automated broad-spectrum internal developer dispatch.</p></div>`;
 
           fs.writeFileSync('digest.html', html);
         }
